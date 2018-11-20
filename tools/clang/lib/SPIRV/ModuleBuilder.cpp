@@ -735,7 +735,7 @@ uint32_t ModuleBuilder::createIgnoreIntersectionCall(uint32_t resultType) {
   return resultId;
 }
 
-uint32_t ModuleBuilder::createTraceRayCall(uint32_t resultType, uint32_t AS,
+void ModuleBuilder::createTraceRayCall(uint32_t AS,
                                            uint32_t flags, uint32_t mask,
                                            uint32_t offset, uint32_t stride,
                                            uint32_t index, uint32_t origin,
@@ -743,13 +743,12 @@ uint32_t ModuleBuilder::createTraceRayCall(uint32_t resultType, uint32_t AS,
                                            uint32_t tmax, uint32_t payload) {
 
   assert(insertPoint && "null insert point");
-  uint32_t resultId = theContext.takeNextId();
   instBuilder
-      .opTraceRays(resultType, resultId, AS, flags, mask, offset, stride, index,
+      .opTraceRays(AS, flags, mask, offset, stride, index,
                    origin, tmin, direction, tmax, payload)
       .x();
   insertPoint->appendInstruction(std::move(constructSite));
-  return resultId;
+  return;
 }
 
 void ModuleBuilder::addExecutionMode(uint32_t entryPointId,

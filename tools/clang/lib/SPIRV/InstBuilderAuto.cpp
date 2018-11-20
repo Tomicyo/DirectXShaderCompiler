@@ -2828,8 +2828,7 @@ InstBuilder &InstBuilder::opIgnoreIntersection(uint32_t result_type,
   return *this;
 }
 
-InstBuilder &InstBuilder::opTraceRays(uint32_t result_type, uint32_t result_id,
-                                      uint32_t AS, uint32_t flags,
+InstBuilder &InstBuilder::opTraceRays(uint32_t AS, uint32_t flags,
                                       uint32_t mask, uint32_t offset,
                                       uint32_t stride, uint32_t index,
                                       uint32_t origin, uint32_t tmin,
@@ -2841,8 +2840,6 @@ InstBuilder &InstBuilder::opTraceRays(uint32_t result_type, uint32_t result_id,
   }
   TheInst.reserve(14);
   TheInst.emplace_back(static_cast<uint32_t>(spv::Op::OpTraceNV));
-  TheInst.emplace_back(result_type);
-  TheInst.emplace_back(result_id);
   TheInst.emplace_back(AS);
   TheInst.emplace_back(flags);
   TheInst.emplace_back(mask);

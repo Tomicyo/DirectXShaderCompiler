@@ -404,8 +404,7 @@ public:
 
   InstBuilder &opIgnoreIntersection(uint32_t result_type, uint32_t result_id);
 
-  InstBuilder &opTraceRays(uint32_t result_type, uint32_t result_id,
-                           uint32_t AS, uint32_t flags, uint32_t mask,
+  InstBuilder &opTraceRays(uint32_t AS, uint32_t flags, uint32_t mask,
                            uint32_t offset, uint32_t stride, uint32_t index,
                            uint32_t origin, uint32_t tmin, uint32_t direction,
                            uint32_t tmax, uint32_t payload);

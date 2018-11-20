@@ -325,7 +325,7 @@ public:
   uint32_t createAcceptAndEndIntersectionCall(uint32_t resultType);
   uint32_t createIgnoreIntersectionCall(uint32_t resultType);
 
-  uint32_t createTraceRayCall(uint32_t resultType, uint32_t AS, uint32_t flags,
+  void createTraceRayCall(uint32_t AS, uint32_t flags,
                               uint32_t mask, uint32_t offset, uint32_t stride,
                               uint32_t index, uint32_t origin, uint32_t tmin,
                               uint32_t direction, uint32_t tmax,

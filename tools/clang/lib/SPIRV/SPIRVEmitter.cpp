@@ -6389,7 +6389,7 @@ uint32_t SPIRVEmitter::processRayIntersection(hlsl::IntrinsicOp op) {
   return 0;
 }
 
-uint32_t SPIRVEmitter::processTraceRay(const CallExpr *callExpr) {
+void SPIRVEmitter::processTraceRay(const CallExpr *callExpr) {
   uint32_t payloadBinding = ~0;
   const auto args = callExpr->getArgs();
 
@@ -6447,11 +6447,10 @@ uint32_t SPIRVEmitter::processTraceRay(const CallExpr *callExpr) {
   if (!flagsConst) {
     emitFatalError("OpTraceNV flags must be a compile time constant",
                    callExpr->getExprLoc());
-    return 0;
+    return;
   }
 
-  return theBuilder.createTraceRayCall(
-      voidType,
+  theBuilder.createTraceRayCall(
       doExpr(args[0]), // AS
       flagsConst,
       doExpr(args[2]), // Cull Mask // Known good
@@ -6459,6 +6458,7 @@ uint32_t SPIRVEmitter::processTraceRay(const CallExpr *callExpr) {
       doExpr(args[4]), // Hit stride // Known good
       doExpr(args[5]), // Miss Shader Index // Known good
       origin, tmin, dir, tmax, payLoadConst);
+  return;
 }
 
 uint32_t SPIRVEmitter::processRayIntrinsic(const CallExpr *callExpr,
@@ -6880,8 +6880,8 @@ SpirvEvalInfo SPIRVEmitter::processIntrinsicCallExpr(const CallExpr *callExpr) {
     break;
   }
   case hlsl::IntrinsicOp::IOP_TraceRay: {
-    retVal = processTraceRay(callExpr);
-    break;
+    processTraceRay(callExpr);
+    return 0;
   }
     INTRINSIC_SPIRV_OP_CASE(ddx, DPdx, true);
     INTRINSIC_SPIRV_OP_WITH_CAP_CASE(ddx_coarse, DPdxCoarse, false,

@@ -484,7 +484,7 @@ private:
   SpirvEvalInfo processIntrinsicNonUniformResourceIndex(const CallExpr *);
 
   uint32_t processRayIntersection(hlsl::IntrinsicOp op);
-  uint32_t processTraceRay(const CallExpr *callExpr);
+  void processTraceRay(const CallExpr *callExpr);
   uint32_t processRayIntrinsic(const CallExpr *callExpr, hlsl::IntrinsicOp op,
                                uint32_t type);
 
