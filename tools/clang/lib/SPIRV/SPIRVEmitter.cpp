@@ -682,6 +682,7 @@ void SPIRVEmitter::HandleTranslationUnit(ASTContext &context) {
 
   const spv_target_env targetEnv = featureManager.getTargetEnv();
 
+  theBuilder.addExtension(Extension::NV_ray_tracing, "Nvidia raytracing", {});
   AddRequiredCapabilitiesForShaderModel();
 
   // Addressing and memory model are required in a valid SPIR-V module.
@@ -6377,6 +6378,144 @@ uint32_t SPIRVEmitter::castToFloat(uint32_t fromVal, QualType fromType,
   return 0;
 }
 
+uint32_t SPIRVEmitter::processRayIntersection(hlsl::IntrinsicOp op) {
+  const uint32_t voidType = theBuilder.getVoidType();
+  switch (op) {
+  case hlsl::IntrinsicOp::IOP_AcceptHitAndEndSearch:
+    return theBuilder.createAcceptAndEndIntersectionCall(voidType);
+  case hlsl::IntrinsicOp::IOP_IgnoreHit:
+    return theBuilder.createIgnoreIntersectionCall(voidType);
+  }
+  return 0;
+}
+
+uint32_t SPIRVEmitter::processTraceRay(const CallExpr *callExpr) {
+  uint32_t payloadBinding = ~0;
+  const auto args = callExpr->getArgs();
+
+  // We don't actually know if an object is a payload until this exact call with
+  // HLSL
+  if (const auto *impcast = dyn_cast<CastExpr>(args[7])) {
+    if (const auto *arg = dyn_cast<DeclRefExpr>(impcast->getSubExpr())) {
+      if (const auto *var_decl = dyn_cast<VarDecl>(arg->getDecl())) {
+        const auto iter = payloadBindings.find(var_decl);
+        if (iter == payloadBindings.end()) {
+          // Declare the payload decoration now
+          std::pair<SpirvEvalInfo, uint32_t> varId =
+              declIdMapper.createPayloadVar(var_decl, llvm::None);
+          theBuilder.decorateLocation(varId.first, varId.second);
+
+          payloadBindings[var_decl] = varId.second;
+          payloadBinding = varId.second;
+        } else {
+          // We have this payload bound already
+          payloadBinding = iter->second;
+        }
+      }
+    }
+  }
+  // 0 - Acceleration structure
+  // 1 - Flags
+  // 2 - Cull Mask
+  // 3 - SBT offset
+  // 4 - Hit group index multiplier
+  // 5 - Miss shader index
+  // 6 - RayDesc Ray
+  //  - 0 - Origin (float3)
+  //  - 1 - Tmin (float)
+  //  - 2 - Direction (float3)
+  //  - 3 - TMax (float)
+  // 7 - Payload
+  //
+
+  const auto floatId = theBuilder.getFloat32Type();
+  const uint32_t floatVec3Type = theBuilder.getVecType(floatId, 3);
+  const uint32_t voidType = theBuilder.getVoidType();
+
+  // Extract the ray description to match SPIR-V
+  uint32_t raydesc = doExpr(args[6]);
+  const auto origin =
+      theBuilder.createCompositeExtract(floatVec3Type, raydesc, {0});
+  const auto tmin = theBuilder.createCompositeExtract(floatId, raydesc, {1});
+  const auto dir =
+      theBuilder.createCompositeExtract(floatVec3Type, raydesc, {2});
+  const auto tmax = theBuilder.createCompositeExtract(floatId, raydesc, {3});
+
+  const uint32_t payLoadConst = theBuilder.getConstantUint32(payloadBinding);
+  const uint32_t flagsConst = tryToEvaluateAsConst(args[1]);
+
+  if (!flagsConst) {
+    emitFatalError("OpTraceNV flags must be a compile time constant",
+                   callExpr->getExprLoc());
+    return 0;
+  }
+
+  return theBuilder.createTraceRayCall(
+      voidType,
+      doExpr(args[0]), // AS
+      flagsConst,
+      doExpr(args[2]), // Cull Mask // Known good
+      doExpr(args[3]), // SBT offset // Known good
+      doExpr(args[4]), // Hit stride // Known good
+      doExpr(args[5]), // Miss Shader Index // Known good
+      origin, tmin, dir, tmax, payLoadConst);
+}
+
+uint32_t SPIRVEmitter::processRayIntrinsic(const CallExpr *callExpr,
+                                           hlsl::IntrinsicOp op,
+                                           uint32_t type) {
+  spv::BuiltIn builtin = spv::BuiltIn::Max;
+
+  switch (op) {
+  case hlsl::IntrinsicOp::IOP_DispatchRaysDimensions:
+    builtin = spv::BuiltIn::LaunchSizeNV;
+    break;
+  case hlsl::IntrinsicOp::IOP_DispatchRaysIndex:
+    builtin = spv::BuiltIn::LaunchIdNV;
+    break;
+  case hlsl::IntrinsicOp::IOP_RayTCurrent:
+    builtin = spv::BuiltIn::HitTNV;
+    break;
+  case hlsl::IntrinsicOp::IOP_RayTMin:
+    builtin = spv::BuiltIn::RayTminNV;
+    break;
+  case hlsl::IntrinsicOp::IOP_HitKind:
+    builtin = spv::BuiltIn::HitKindNV;
+    break;
+  case hlsl::IntrinsicOp::IOP_WorldRayDirection:
+    builtin = spv::BuiltIn::WorldRayDirectionNV;
+    break;
+  case hlsl::IntrinsicOp::IOP_WorldRayOrigin:
+    builtin = spv::BuiltIn::WorldRayOriginNV;
+    break;
+  case hlsl::IntrinsicOp::IOP_ObjectRayDirection:
+    builtin = spv::BuiltIn::ObjectRayDirectionNV;
+    break;
+  case hlsl::IntrinsicOp::IOP_ObjectRayOrigin:
+    builtin = spv::BuiltIn::ObjectRayOriginNV;
+    break;
+  case hlsl::IntrinsicOp::IOP_ObjectToWorld:
+    builtin = spv::BuiltIn::ObjectToWorldNV;
+    break;
+  case hlsl::IntrinsicOp::IOP_WorldToObject:
+    builtin = spv::BuiltIn::WorldToObjectNV;
+    break;
+  case hlsl::IntrinsicOp::IOP_InstanceIndex:
+    builtin = spv::BuiltIn::InstanceCustomIndexNV;
+    break;
+  default:
+  case hlsl::IntrinsicOp::IOP_RayFlags:
+    // case hlsl::IntrinsicOp::IOP_InstanceID:             builtin =
+    // spv::BuiltIn::; break;
+    emitError("Ray intrinsic function unimplemented", callExpr->getExprLoc());
+    return 0;
+    break;
+  }
+
+  const uint32_t varId = declIdMapper.getBuiltinVar(builtin);
+  return theBuilder.createLoad(type, varId);
+}
+
 SpirvEvalInfo SPIRVEmitter::processIntrinsicCallExpr(const CallExpr *callExpr) {
   const FunctionDecl *callee = callExpr->getDirectCallee();
   assert(hlsl::IsIntrinsicOp(callee) &&
@@ -6685,6 +6824,63 @@ SpirvEvalInfo SPIRVEmitter::processIntrinsicCallExpr(const CallExpr *callExpr) {
     else
       retVal = processNonFpMatrixTranspose(matType, doExpr(mat));
 
+    break;
+  }
+  case hlsl::IntrinsicOp::IOP_ObjectToWorld:
+  case hlsl::IntrinsicOp::IOP_WorldToObject: {
+    const auto floatRowQualType =
+        astContext.getExtVectorType(astContext.FloatTy, 4);
+    const auto floatRowQualTypeId =
+        typeTranslator.translateType(floatRowQualType);
+
+    retVal = processRayIntrinsic(
+        callExpr, hlslOpcode,
+        theBuilder.getMatType(astContext.FloatTy, floatRowQualTypeId, 3));
+    break;
+  }
+
+  case hlsl::IntrinsicOp::IOP_InstanceIndex: {
+    retVal =
+        processRayIntrinsic(callExpr, hlslOpcode, theBuilder.getInt32Type());
+    break;
+  }
+
+  case hlsl::IntrinsicOp::IOP_HitKind:
+  case hlsl::IntrinsicOp::IOP_RayFlags: {
+    retVal =
+        processRayIntrinsic(callExpr, hlslOpcode, theBuilder.getUint32Type());
+    break;
+  }
+  case hlsl::IntrinsicOp::IOP_RayTCurrent:
+  case hlsl::IntrinsicOp::IOP_RayTMin: {
+    retVal =
+        processRayIntrinsic(callExpr, hlslOpcode, theBuilder.getFloat32Type());
+    break;
+  }
+  case hlsl::IntrinsicOp::IOP_WorldRayDirection:
+  case hlsl::IntrinsicOp::IOP_WorldRayOrigin:
+  case hlsl::IntrinsicOp::IOP_ObjectRayDirection:
+  case hlsl::IntrinsicOp::IOP_ObjectRayOrigin: {
+    retVal = processRayIntrinsic(
+        callExpr, hlslOpcode,
+        theBuilder.getVecType(theBuilder.getFloat32Type(), 3));
+    break;
+  }
+
+  case hlsl::IntrinsicOp::IOP_DispatchRaysDimensions:
+  case hlsl::IntrinsicOp::IOP_DispatchRaysIndex: {
+    retVal = processRayIntrinsic(
+        callExpr, hlslOpcode,
+        theBuilder.getVecType(theBuilder.getUint32Type(), 2));
+    break;
+  }
+  case hlsl::IntrinsicOp::IOP_AcceptHitAndEndSearch:
+  case hlsl::IntrinsicOp::IOP_IgnoreHit: {
+    retVal = processRayIntersection(hlslOpcode);
+    break;
+  }
+  case hlsl::IntrinsicOp::IOP_TraceRay: {
+    retVal = processTraceRay(callExpr);
     break;
   }
     INTRINSIC_SPIRV_OP_CASE(ddx, DPdx, true);
@@ -9188,9 +9384,23 @@ SPIRVEmitter::getSpirvShaderStage(const hlsl::ShaderModel &model) {
     return spv::ExecutionModel::Fragment;
   case hlsl::ShaderModel::Kind::Compute:
     return spv::ExecutionModel::GLCompute;
+  case hlsl::ShaderModel::Kind::RayGeneration:
+    return spv::ExecutionModel::RayGenerationNV;
+  case hlsl::ShaderModel::Kind::Intersection:
+    return spv::ExecutionModel::IntersectionNV;
+  case hlsl::ShaderModel::Kind::AnyHit:
+    return spv::ExecutionModel::AnyHitNV;
+  case hlsl::ShaderModel::Kind::ClosestHit:
+    return spv::ExecutionModel::ClosestHitNV;
+  case hlsl::ShaderModel::Kind::Miss:
+    return spv::ExecutionModel::MissNV;
+  case hlsl::ShaderModel::Kind::Callable:
+    return spv::ExecutionModel::CallableNV;
+  case hlsl::ShaderModel::Kind::Library:
   default:
     break;
   }
+  // XXX: need to strip out the function attribute to figure out the real one
   llvm_unreachable("unknown shader model");
 }
 
@@ -9201,6 +9411,9 @@ void SPIRVEmitter::AddRequiredCapabilitiesForShaderModel() {
     theBuilder.requireCapability(spv::Capability::Geometry);
   } else {
     theBuilder.requireCapability(spv::Capability::Shader);
+  }
+  if (shaderModel.IsRay()) {
+    theBuilder.requireCapability(spv::Capability::RayTracingNV);
   }
 }
 
@@ -9587,7 +9800,7 @@ bool SPIRVEmitter::emitEntryFunctionWrapper(const FunctionDecl *decl,
   //    of the main entry point function is done.
   if (shaderModel.IsHS()) {
     // Create stage output variables out of the return type.
-    if (!declIdMapper.createStageOutputVar(decl, numOutputControlPoints,
+    if (!declIdMapper.createHSStageOutputVar(decl, numOutputControlPoints,
                                            outputControlPointIdVal, retVal))
       return false;
     if (!processHSEntryPointOutputAndPCF(

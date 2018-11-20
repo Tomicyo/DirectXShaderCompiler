@@ -719,6 +719,38 @@ void ModuleBuilder::createEndPrimitive() {
   instBuilder.opEndPrimitive().x();
   insertPoint->appendInstruction(std::move(constructSite));
 }
+uint32_t
+ModuleBuilder::createAcceptAndEndIntersectionCall(uint32_t resultType) {
+  assert(insertPoint && "null insert point");
+  uint32_t resultId = theContext.takeNextId();
+  instBuilder.opAcceptAndEndIntersection(resultType, resultId).x();
+  insertPoint->appendInstruction(std::move(constructSite));
+  return resultId;
+}
+uint32_t ModuleBuilder::createIgnoreIntersectionCall(uint32_t resultType) {
+  assert(insertPoint && "null insert point");
+  uint32_t resultId = theContext.takeNextId();
+  instBuilder.opIgnoreIntersection(resultType, resultId).x();
+  insertPoint->appendInstruction(std::move(constructSite));
+  return resultId;
+}
+
+uint32_t ModuleBuilder::createTraceRayCall(uint32_t resultType, uint32_t AS,
+                                           uint32_t flags, uint32_t mask,
+                                           uint32_t offset, uint32_t stride,
+                                           uint32_t index, uint32_t origin,
+                                           uint32_t tmin, uint32_t direction,
+                                           uint32_t tmax, uint32_t payload) {
+
+  assert(insertPoint && "null insert point");
+  uint32_t resultId = theContext.takeNextId();
+  instBuilder
+      .opTraceRays(resultType, resultId, AS, flags, mask, offset, stride, index,
+                   origin, tmin, direction, tmax, payload)
+      .x();
+  insertPoint->appendInstruction(std::move(constructSite));
+  return resultId;
+}
 
 void ModuleBuilder::addExecutionMode(uint32_t entryPointId,
                                      spv::ExecutionMode em,
@@ -1142,6 +1174,15 @@ uint32_t ModuleBuilder::getSamplerType() {
   const uint32_t typeId = theContext.getResultIdForType(type);
   theModule.addType(type, typeId);
   theModule.addDebugName(typeId, "type.sampler");
+  return typeId;
+}
+
+uint32_t ModuleBuilder::getAccelerationStructureType() {
+  const Type *type = Type::getAccelerationStructure(theContext);
+  const uint32_t typeId = theContext.getResultIdForType(type);
+  fprintf(stderr, "Acceleration structure tied to result_id: %d\n", typeId);
+  theModule.addType(type, typeId);
+  theModule.addDebugName(typeId, "type.accelerationstructure");
   return typeId;
 }
 

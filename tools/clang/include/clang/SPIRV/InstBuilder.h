@@ -399,6 +399,19 @@ public:
                    llvm::Optional<spv::ImageOperandsMask> image_operands,
                    bool is_fetch, bool is_sparse);
 
+  InstBuilder &opAcceptAndEndIntersection(uint32_t result_type,
+                                          uint32_t result_id);
+
+  InstBuilder &opIgnoreIntersection(uint32_t result_type, uint32_t result_id);
+
+  InstBuilder &opTraceRays(uint32_t result_type, uint32_t result_id,
+                           uint32_t AS, uint32_t flags, uint32_t mask,
+                           uint32_t offset, uint32_t stride, uint32_t index,
+                           uint32_t origin, uint32_t tmin, uint32_t direction,
+                           uint32_t tmax, uint32_t payload);
+
+  InstBuilder &opAccelerationStructure(uint32_t resultType);
+
   // Methods for supplying additional parameters.
   InstBuilder &fPFastMathMode(spv::FPFastMathModeMask);
   InstBuilder &fPRoundingMode(spv::FPRoundingMode);
