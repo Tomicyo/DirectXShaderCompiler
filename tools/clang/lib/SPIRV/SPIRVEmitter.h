@@ -483,6 +483,11 @@ private:
   /// Processes the NonUniformResourceIndex intrinsic function.
   SpirvEvalInfo processIntrinsicNonUniformResourceIndex(const CallExpr *);
 
+  uint32_t processRayIntersection(hlsl::IntrinsicOp op);
+  void processTraceRay(const CallExpr *callExpr);
+  uint32_t processRayIntrinsic(const CallExpr *callExpr, hlsl::IntrinsicOp op,
+                               uint32_t type);
+
 private:
   /// Returns the <result-id> for constant value 0 of the given type.
   uint32_t getValueZero(QualType type);
@@ -1018,6 +1023,9 @@ private:
 
   /// Maps a given statement to the basic block that is associated with it.
   llvm::DenseMap<const Stmt *, uint32_t> stmtBasicBlock;
+
+  // Maps ...
+  llvm::DenseMap<const VarDecl *, uint32_t> payloadBindings;
 
   /// This is the Patch Constant Function. This function is not explicitly
   /// called from the entry point function.

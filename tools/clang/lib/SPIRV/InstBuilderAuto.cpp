@@ -2802,6 +2802,58 @@ InstBuilder::opMemberDecorateStringGOOGLE(uint32_t struct_type, uint32_t member,
   return *this;
 }
 
+InstBuilder &InstBuilder::opAcceptAndEndIntersection(uint32_t result_type,
+                                                     uint32_t result_id) {
+  if (!TheInst.empty()) {
+    TheStatus = Status::NestedInst;
+    return *this;
+  }
+  TheInst.reserve(3);
+  TheInst.emplace_back(static_cast<uint32_t>(spv::Op::OpTerminateRayNV));
+  TheInst.emplace_back(result_type);
+  TheInst.emplace_back(result_id);
+  return *this;
+}
+
+InstBuilder &InstBuilder::opIgnoreIntersection(uint32_t result_type,
+                                               uint32_t result_id) {
+  if (!TheInst.empty()) {
+    TheStatus = Status::NestedInst;
+    return *this;
+  }
+  TheInst.reserve(3);
+  TheInst.emplace_back(static_cast<uint32_t>(spv::Op::OpIgnoreIntersectionNV));
+  TheInst.emplace_back(result_type);
+  TheInst.emplace_back(result_id);
+  return *this;
+}
+
+InstBuilder &InstBuilder::opTraceRays(uint32_t AS, uint32_t flags,
+                                      uint32_t mask, uint32_t offset,
+                                      uint32_t stride, uint32_t index,
+                                      uint32_t origin, uint32_t tmin,
+                                      uint32_t direction, uint32_t tmax,
+                                      uint32_t payload) {
+  if (!TheInst.empty()) {
+    TheStatus = Status::NestedInst;
+    return *this;
+  }
+  TheInst.reserve(14);
+  TheInst.emplace_back(static_cast<uint32_t>(spv::Op::OpTraceNV));
+  TheInst.emplace_back(AS);
+  TheInst.emplace_back(flags);
+  TheInst.emplace_back(mask);
+  TheInst.emplace_back(offset);
+  TheInst.emplace_back(stride);
+  TheInst.emplace_back(index);
+  TheInst.emplace_back(origin);
+  TheInst.emplace_back(tmin);
+  TheInst.emplace_back(direction);
+  TheInst.emplace_back(tmax);
+  TheInst.emplace_back(payload);
+  return *this;
+}
+
 void InstBuilder::encodeImageOperands(spv::ImageOperandsMask value) {
   if (bitEnumContains(value, spv::ImageOperandsMask::Bias)) {
     Expectation.emplace_back(OperandKind::IdRef);

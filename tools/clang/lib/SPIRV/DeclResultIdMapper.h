@@ -279,7 +279,7 @@ public:
   bool createStageOutputVar(const DeclaratorDecl *decl, uint32_t storedValue,
                             bool forPCF);
   /// \brief Overload for handling HS control point stage ouput variable.
-  bool createStageOutputVar(const DeclaratorDecl *decl, uint32_t arraySize,
+  bool createHSStageOutputVar(const DeclaratorDecl *decl, uint32_t arraySize,
                             uint32_t invocationId, uint32_t storedValue);
 
   /// \brief Creates the stage input variables by parsing the semantics attached
@@ -309,6 +309,9 @@ public:
   SpirvEvalInfo createFileVar(const VarDecl *var,
                               llvm::Optional<uint32_t> init);
 
+  // Creates a payload variable and returns its binding location
+  std::pair<SpirvEvalInfo, uint32_t> createPayloadVar(const VarDecl *var,
+                              llvm::Optional<uint32_t> init);
   /// \brief Creates an external-visible variable and returns its <result-id>.
   SpirvEvalInfo createExternVar(const VarDecl *var);
 
@@ -378,6 +381,8 @@ private:
   /// \brief Returns the SPIR-V information for the given decl.
   /// Returns nullptr if no such decl was previously registered.
   const DeclSpirvInfo *getDeclSpirvInfo(const ValueDecl *decl) const;
+
+  uint32_t CurrentPayloadBindingLocation = 0;
 
 public:
   /// \brief Returns the information for the given decl.
@@ -575,6 +580,19 @@ private:
                        llvm::Optional<uint32_t> invocationId, uint32_t *value,
                        bool noWriteBack, SemanticInfo *inheritSemantic);
 
+  bool createNonStructureStageVar(const hlsl::SigPoint *sigPoint, const NamedDecl *decl,
+                       bool asInput, QualType asType, uint32_t arraySize,
+                       const llvm::StringRef namePrefix,
+                       llvm::Optional<uint32_t> invocationId, uint32_t *value,
+                       bool noWriteBack, SemanticInfo *inheritSemantic);
+
+  bool createPayloadInStageVar(const hlsl::SigPoint *sigPoint, const NamedDecl *decl,
+                       bool asInput, QualType asType, uint32_t arraySize,
+                       const llvm::StringRef namePrefix,
+                       llvm::Optional<uint32_t> invocationId, uint32_t *value,
+                       bool noWriteBack, SemanticInfo *inheritSemantic);
+
+
   /// Creates the SPIR-V variable instruction for the given StageVar and returns
   /// the <result-id>. Also sets whether the StageVar is a SPIR-V builtin and
   /// its storage class accordingly. name will be used as the debug name when
@@ -667,13 +685,12 @@ private:
   llvm::DenseMap<const DeclContext *, uint32_t> ctBufferPCTypeIds;
 
   /// <result-id> for the SPIR-V builtin variables accessed by
-  /// WaveGetLaneCount() and WaveGetLaneIndex().
+  /// WaveGetLaneCount() and WaveGetLaneIndex(), and ray tracing builtins
   ///
-  /// These are the only two cases that SPIR-V builtin variables are accessed
+  /// These are the only cases that SPIR-V builtin variables are accessed
   /// using HLSL intrinsic function calls. All other builtin variables are
   /// accessed using stage IO variables.
-  uint32_t laneCountBuiltinId;
-  uint32_t laneIndexBuiltinId;
+	llvm::DenseMap<uint32_t, uint32_t> functionToBuiltinIds;
 
   /// Whether the translated SPIR-V binary needs legalization.
   ///
@@ -753,8 +770,7 @@ DeclResultIdMapper::DeclResultIdMapper(
     : shaderModel(model), theBuilder(builder), theEmitter(emitter),
       spirvOptions(options), astContext(context),
       diags(context.getDiagnostics()), typeTranslator(translator),
-      entryFunctionId(0), laneCountBuiltinId(0), laneIndexBuiltinId(0),
-      needsLegalization(false),
+      entryFunctionId(0), needsLegalization(false),
       glPerVertex(model, context, builder, typeTranslator) {}
 
 bool DeclResultIdMapper::decorateStageIOLocations() {
